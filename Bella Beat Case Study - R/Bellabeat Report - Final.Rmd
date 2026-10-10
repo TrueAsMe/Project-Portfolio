@@ -1,0 +1,236 @@
+---
+title: "Bellabeat Case Study - Erick M"
+output:
+html_document:
+  default
+  
+---
+
+**1. Define a Clear Business Task (Ask)**
+
+*Key Stakeholders:* \
+-   Urska Srsen (CEO - Primary) \
+-   Sanrido Mur (Executive/C-Suite - Primary) \
+-   Analytics Team (Secondary) 
+
+*Business Task:* \
+  Analyze smart device usage data to gain insight into how people are already using their smart devices. Using this information, make high-level recommendations for how these trends can inform Bellabeat marketing strategy.
+
+*Main Takeaways from Analysis:* \
+-   Trends in Smart Devices \
+-   Actionable insights that can be taken to improve connections to Bellabeat customers \
+-   Actionable insights that can be implemented to marketing strategy to potentially increase ROI
+
+--------------------------------------------------------------------------------
+
+**2. Description of Data Sources (Prepare)**
+
+-   FitBit Dataset
+ 
+ The dataset used in this analysis is available under a public domain license through Kaggle. The dataset contains personal fitness tracker information collected from 33 Fitbit users. Data was collected by a distributed survey via Amazon Mechanical Turk between 04/12/2016-05/12/2016. The data includes users’ active minutes. The dataset contains information on users’ sleep duration. Since the data was generated from a survey of only 33 entries, its sample size is marginal. This data could still be benefit in making inferences of trends.
+
+--------------------------------------------------------------------------------
+
+**3. Data Cleaning and Manipulation (Process)**
+
+  *A. Loading Environment*
+
+```{r}
+#Installing Packages for Use in Project: Here I am installing all the packages I would like to use to analyze this data set with the uses going to the cleaning and later analysis process.
+
+install.packages("tidyverse")
+install.packages("dplyr")
+install.packages("skimr")
+install.packages("tidyr")
+install.packages("readr")
+install.packages("learnr")
+install.packages("ggplot2")
+install.packages("corrgram")
+
+#Here we are loading the library of functions to the console
+
+library(tidyverse)
+library(dbplyr)
+library(skimr)
+library (tidyr)
+library(readr)
+library(ggplot2)
+library(corrgram)
+```
+
+  *B. Importing Datasets*
+  
+```{r}
+#Loading daily datasets - read in data
+
+DailyActivity <- read_csv("/cloud/project/2622327/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+DailySleep <- read_csv("/cloud/project/2622327/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+
+##Format to drop day from date on HourlySteps table
+#This was done in excel with the formula below:
+'=text(B2, "hh:mm:ss AM/PM")'
+
+#Then the literal values were copied into the ActivityHour column then the new file was read in by read.csv:
+
+HourlySteps <- read_csv("/cloud/project/2622327/Fitabase Data 4.12.16-5.12.16/hourlySteps_merged - hourlySteps_merged.csv")
+
+```
+
+  *C. Exploring Datasets*
+-   For the first part, here we are previewing the datasets
+```{r}
+# These functions were repeated for each of the datasets
+head(DailyActivity)
+colnames(DailyActivity)
+skim_without_charts(DailyActivity)
+head(DailySleep)
+colnames(DailySleep)
+skim_without_charts(DailySleep)
+```
+
+
+
+- Observations:
+
+  1. First I saw that the datasets were split by Daily, Hourly, Minute and Seconds based on the different points that were being tracked like the steps, calories, etc. We will be focusing on the Daily and Hourly to find daily habit and intraday habits of the Fitbit users.
+
+  2. The other daily datasets (Calories, Intensity, Steps) all contained columns that were already in the DailyActivity table so no need for those files to be imported in. 
+  
+  3. With the DailySleep table, the hour had been included so we are going to drop that part off of the columns observations with the *separate()* function.
+  
+  4. Only 24 participants in the Sleep record table and all 33 present in the DailyActivity table. Not using weight log info as there are under 10 people. The only credible sample is from activity metrics so we’ll focus on the Daily datasets
+  
+  5. Looking at the final DailyMerged table there are 74 entries (about 7% of data) that has no registered steps but has registered calories and sedentary minutes. With the extra 0's, it skews the statistical data. We will make a table without the 74 entries during the cleaning.
+  
+  *D. Cleaning the Data*
+
+-   Format data column 'ActivityDate' to uniform date on DailySleep dataframe
+-   Merge Daily dataframes (Activity and Sleep)
+-   Make Daily dataframe without "0 step" readings
+-   Format to drop day from date on HourlySteps table
+-   Converting minutes to hours
+-   Making list of all users' category averages
+
+*Drop time from 'SleepDay' column in DailySleep dataframe*
+```{r}
+#Using *separate()* to split the observation in the SleepDay column
+DailySleep_Edit <- separate(DailySleep, SleepDay, c("Date","Time"), sep = " ", convert = FALSE)
+
+#Delete the newly made column with just the hour
+DailySleep_Edit <- subset(DailySleep_Edit, select = -c(Time))
+
+#Check new table for accuracy of execution
+head(DailySleep_Edit)
+```
+
+*Merge DailyActivity and new DailySleep table into cohesive dataframe*
+```{r}
+DailyMerged <- left_join(DailyActivity, DailySleep_Edit, by = c('Id' = 'Id','ActivityDate' = 'Date'))
+```
+
+*Remove "0 step" readings from dataset*
+```{r}
+DailyMergedEdit <- filter(DailyMerged, TotalSteps != 0) 
+
+head(DailyMergedEdit)
+```
+
+*Adding columns converting minutes to hours for activity data*
+```{r}
+DailyMerged <- mutate(DailyMerged, VeryActiveHours = DailyMerged$VeryActiveMinutes/60, FairlyActiveHours = DailyMerged$FairlyActiveMinutes/60, LightlyActiveHours = DailyMerged$LightlyActiveMinutes/60, SedentaryHours = DailyMerged$SedentaryMinutes/60)
+
+head(DailyMerged)
+```
+
+**Make a list of every users' category averages**
+```{r}
+DailyMergedList1 <- aggregate(list(AvgSteps = DailyMergedEdit$TotalSteps, AvgDistance = DailyMergedEdit$TotalDistance, ModerateDistance = DailyMergedEdit$ModeratelyActiveDistance, ActiveDistance = DailyMergedEdit$VeryActiveDistance, LightDistance = DailyMergedEdit$LightActiveDistance, ModerateMinutes = DailyMergedEdit$FairlyActiveMinutes/60, ActiveMinutes = DailyMergedEdit$VeryActiveMinutes/60, LightMinutes = DailyMergedEdit$LightlyActiveMinutes/60, SittingMinutes = DailyMergedEdit$SedentaryMinutes/60, AvgCalories = DailyMergedEdit$Calories), by = list(Id = DailyMergedEdit$Id), mean)
+
+head(DailyMergedList1)
+
+```
+
+
+- After creating the new comprehensive DailyMerged table, there were NA values (24 participants with sleep data vs 33 of total participants) so we will ignore those during statistical analysis. 
+
+--------------------------------------------------------------------------------
+
+**4. Data Analysis and Findings (Analyze & Share)**
+
+- Now lets look at a summary of the data and see what we can find:
+```{r}
+DailyMergedEdit %>% summary()
+```
+    Key Findings:
+  - Users spend ~16hours on average in a sedentary state!
+  - Users tend to get about 7 hours of asleep with about 1 hour to fall asleep
+  - Users got about 8300 steps and burned about 2300 calories daily.
+
+- Using a Correlogram, we can get a snapshot of what variables are somewhat correlated. Using 'DailyMergedList1' we will see the correlation of variables with the averages of each participant. The darker shade of blue shows a strong positive correlation and a darker shade of red shows a strong negative correlation:
+```{r}
+corrgram(DailyMergedList1, order = NULL, panel=panel.shade, text.panel=panel.txt, main="Correlation Graph")
+```
+  
+  Key Findings:
+
+- The more sitting minutes a person has in a day, the less likely they are to be active at all during the day resulting in less steps and distance but the correlation between ActiveDistance/ActiveMinutes vs Sedentary Minutes is loosely positive. 
+- Sitting minutes and calories are loosely negatively correlated. This goes my assumption of "more sitting = less calories burned"
+- Calories burned have a meaningful correlation to the amount of steps and distance covered by the user.
+- The correlation with 'Id' should be next to none but the correlogram suggests that the latter part of user Ids were more generally more active than anyone else in the sample group which could skew the data when certain users contribute substantially to a metric.
+
+- Lets explore some relationships: \
+*Tracker Distance/Active Minutes vs Sitting Minutes*
+```{r}
+#Tracker Distance vs Sedentary Minutes
+ggplot(data = DailyMergedEdit, aes(x = TrackerDistance , y = SedentaryMinutes)) + geom_point() + geom_smooth() + scale_x_continuous(breaks=seq(0, 25, by = 2.5)) + scale_y_continuous(breaks=seq(0, 1500, by = 250)) + labs(title = "Total Distance Traveled vs Sitting Minutes")
+
+#VeryActiveMinutes vs SedentaryMinutes
+ggplot(data = DailyMergedEdit, aes(x = VeryActiveDistance , y = SedentaryMinutes)) + geom_point() + geom_smooth() + scale_x_continuous(breaks=seq(0, 25, by = 2.5)) + scale_y_continuous(breaks=seq(0, 1500, by = 250)) + labs(title = "Active Minutes vs Sitting Minutes")
+```
+  \
+  - For a majority of the data, the scatter plots show a slight negative correlation between distance and sitting.
+  
+*Sitting Minutes vs Calories Burned*
+```{r}
+#Sitting Minutes vs Calories
+ggplot(data = DailyMergedEdit, aes(x = SedentaryMinutes, y = Calories)) + geom_jitter() + geom_smooth() + scale_x_continuous(breaks=seq(0,1500, by = 250)) + scale_y_continuous(breaks=seq(0, 5000, by = 250)) + labs(title = "Sitting Minutes vs Calories Burned")
+``` 
+  \
+  - For a majority of the data, we see that the more sitting minutes that someone accumulates, the more likely they will burn less calories throughout the day.
+  
+*Do people who sleep more burn less calories?*
+```{r}
+#TotalSleepRecords vs Calories Burned
+ggplot(data = DailyMergedEdit, aes(x = TotalSleepRecords, y = Calories, color = Id, size = Id)) + geom_point() + scale_x_continuous(breaks = seq(0,3,by=1)) + scale_y_continuous(breaks = seq(0,5000, by = 250)) +  scale_color_gradientn(colours = rainbow(5)) +
+  scale_size_continuous(range = c(5,1)) + labs(title = "Total Sleep Records vs Calories Burned")
+```
+  \
+  - I wanted to see if one part of the dataset accounted for more of the calories burned than they rest of the participants. This was signified by the color and sizes of the dots. The lower on the scale, the lower numeric Id value of the participant. Likewise with the point size, the bigger the point the lower numeric Id of the participant. 
+    
+    With this plot, we see that the spread is fairly equal in terms of calories burned with majority falling within the 1Q and 3Q of a range of ~2200 to ~2800. We also see that the top of the 1 Sleep Record column is darker indicating that some of the higher numeric Ids are generally more active.
+  
+*Total Steps by Hour of Day*
+```{r}
+#Total Steps by Hour of Day
+StepsbyHour <- aggregate(cbind(StepTotal) ~ ActivityHour , data = HourlySteps , FUN = sum )
+
+ggplot(data = StepsbyHour, aes(x=ActivityHour, weight=StepTotal)) + geom_bar(color = "seagreen") + scale_y_continuous(breaks = seq(0, 600000, by = 100000), labels = scales::comma) + labs(title = "Total Steps by Hour", x = "Hour of Day", y = "Amount of Steps")
+```
+  \
+  - The most active times of the day are between 5p-7p with the next busiest times being between 12p-2p. 
+
+**5. Make Recommendations based in Analysis (Act)**
+
+  -   When analyzing data 74 entries (7% of the eligible data) were entries of 0 steps suggesting the users were not wearing their Fitbits suggesting that it stays on while not wearing. This is a problem because it gives questionable readings for calories and sedentary minutes (showing up as 24 hours sitting!). Optimizing this feature to correctly register when the Fitbit  will lead to less skewed data and more accurate gauges of health.
+  
+  -   Adding an opt-in alert feature to have total step goals or limiting time in bed as these factors greatly affect the calories burned for a user. That way users can be more aware of how stationary and/or active they are.
+  
+  -   Judging from the times of day for most steps, lightly active minutes, and amount of average sedentary hours - The Bellabeat team could be targeting working women that usually work 9-5 in most likely office jobs as they are prone to sitting more throughout the day. The absence of moderate and very active minutes along with the average of 3.5 hours of lightly active minutes could mean that they are only somewhat active in transit and/or getting ready for work.
+  
+  
+                Thank you for your time.
+
+--------------------------------------------------------------------------------
+
+
+
